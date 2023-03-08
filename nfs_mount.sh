@@ -50,13 +50,25 @@ MOUNT_AT_BOOT="yes"
 
 #=========CODE STARTS HERE=========
 
+# Check if we have an IPv4 address on any of the interfaces that is
+# not a local loopback (127.0.0.0/8) or link-local (169.254.0.0/16) adddress.
+
+function has_ip_address() {
+  ip addr show | grep 'inet ' | grep -vE '127.|169.254.' >/dev/null 2>&1
+  if [[ $? -eq 0 ]]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
 # Run this script only once after getting an IP address
 [ -f /tmp/nfs_mount.lock ] && exit 1
 touch /tmp/nfs_mount.lock
 
 if [ "${WAIT_FOR_SERVER}" == "yes" ]; then
     echo -n "Waiting for getting an IP address."
-    until [ "$(ping -4 -c1 www.google.com &>/dev/null ; echo $?)" = "0" ]; do
+    while [ "$(has_ip_address)" != "true" ]; do
 	sleep 1
 	echo -n "."
     done
