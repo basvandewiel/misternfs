@@ -78,7 +78,7 @@ if [ "${WAIT_FOR_SERVER}" == "yes" ]; then
     echo
 fi
 
-if [ "${WOL}" = "yes" ]; then
+if [ "${WOL}" == "yes" ]; then
     for REP in {1..16}; do
 	MAC+=$(echo ${SERVER_MAC})
     done
@@ -104,7 +104,7 @@ if [ "${SERVER}" == "" ]; then
     exit 1
 fi
 
-if ! [ "$(zgrep "CONFIG_NFS_FS=" /proc/config.gz)" = "CONFIG_NFS_FS=y" ]; then
+if ! [ "$(zgrep "CONFIG_NFS_FS=" /proc/config.gz)" == "CONFIG_NFS_FS=y" ]; then
     echo "The current Kernel doesn't support NFS."
     echo "Please update your MiSTer Linux system."
     exit 1
