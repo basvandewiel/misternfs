@@ -87,7 +87,7 @@ function viable_config() {
 
 # Wait for the NFS server to be up
 
-wait_for_nfs() {
+function wait_for_nfs() {
     local PORTS=(2049 111)
     local START=$(date +%s)
 
