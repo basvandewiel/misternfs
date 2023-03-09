@@ -34,7 +34,7 @@ SERVER=""
 SERVER_PATH=""
 
 # The number of seconds to wait before considering the server unreachable
-SERVER_TIMEOUT="30"
+SERVER_TIMEOUT="60"
 
 # Wake up the server from above by using WOL (Wake On LAN)
 WOL="no"
@@ -55,6 +55,26 @@ MOUNT_AT_BOOT="yes"
 #=========NO USER-SERVICEABLE PARTS BELOW THIS LINE=====
 
 #=========FUNCTION LIBRARY==============================
+
+# Are we running as root?
+
+function as_root() {
+  if [ `whoami` != "root" ]; then
+    echo "This script must be run as root. Exiting."
+    exit 1
+  fi
+}
+
+# Run only once
+
+function run_once() {
+  if [ -f /tmp/nfs_mount.lock ]; then
+    echo "This script may run only once per session. Please reboot your MiSTer first."
+    exit 1
+  fi
+  touch /tmp/nfs_mount.lock
+}
+
 
 # Check if we have an IPv4 address on any of the interfaces that is
 # not a local loopback (127.0.0.0/8) or link-local (169.254.0.0/16) adddress.
@@ -78,115 +98,177 @@ function viable_config() {
   if [ "${SERVER_PATH}" != "" ]; then
     VIABLE="true"
   fi
-  if [ "${VIABLE}" == "true" ]; then
-    echo "true"
-  else
-    echo "false"
+  if [ "${VIABLE}" == "false" ]; then
+    echo "You must set the SERVER and SERVER_PATH variables before proceeding. Exiting."
+    exit 1
+  fi
+}
+
+# Wake-up the NFS server using WOL
+
+function wake_up_nfs() {
+  if [ "${WOL}" == "yes" ]; then
+    for REP in {1..16}; do
+      MAC+=$(echo ${SERVER_MAC})
+    done
+    echo -n "${MAC}" | xxd -r -u -p | socat - UDP-DATAGRAM:255.255.255.255:9,broadcast
   fi
 }
 
 # Wait for the NFS server to be up
+# We exit hard on timeout
 
 function wait_for_nfs() {
-    local PORTS=(2049 111)
-    local START=$(date +%s)
+    if [ "${WAIT_FOR_SERVER}" == "true" ]; then
+      local PORTS=(2049 111)
+      local START=$(date +%s)
 
-    while true; do
-        for PORT in "${PORTS[@]}"; do
-            nc -z "$SERVER" "$PORT" >/dev/null 2>&1
-            if [ $? -eq 0 ]; then
-                echo "TCP connection to $SERVER on port $PORT succeeded!"
-                return 0
-            fi
-        done
+      while true; do
+          for PORT in "${PORTS[@]}"; do
+              nc -z "$SERVER" "$PORT" >/dev/null 2>&1
+              if [ $? -eq 0 ]; then
+                  echo "NFS-server $SERVER is alive."
+                  return 0
+              fi
+          done
 
-        sleep 1
+          sleep 1
 
-        local NOW=$(date +%s)
-        local ELAPSED=$((NOW - START))
-        if [ $ELAPSED -ge $SERVER_TIMEOUT ]; then
-            echo "Timeout waiting for TCP connection to $SERVER on ports ${PORTS[*]}"
-            return 1
-        fi
-    done
+          local NOW=$(date +%s)
+          local ELAPSED=$((NOW - START))
+          if [ $ELAPSED -ge $SERVER_TIMEOUT ]; then
+              echo "Timeout while waiting $SERVER_TIMEOUT seconds for NFS-server $SERVER.}"
+              exit 1
+          fi
+      done
+    fi
+    return 0
+}
+
+# Install the mount-at-boot scripts
+
+function install_mount_at_boot() {
+  if [ "${MOUNT_AT_BOOT}" == "yes" ]; then
+
+    # We need to write to the root filesystem so remount it
+    # read-write if it's currently read-only.
+    mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
+    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
+
+    local ORIGINAL_SCRIPT_PATH="$0"
+    local NET_UP_SCRIPT="/etc/network/if-up.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
+    local NET_DOWN_SCRIPT="/etc/network/if-down.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
+
+    # Make sure we have a sane working environment
+    [ ! -d /etc/network/if-up.d ]
+    mkdir -p /etc/network/if-up.d
+
+    [ ! -d /etc/network/if-down.d ]
+    mkdir -p /etc/network/if-down.d
+
+    # Permissions should be in a known-good state
+    chmod 755 /etc/network/if-up.d
+    chmod 755 /etc/network/if-down.d
+    chmod 775 /etc/network
+    chmod 775 /etc
+
+    # We always recreate this script because we have no way to track changes to it
+    [ -f ${NET_UP_SCRIPT} ]
+    rm ${NET_UP_SCRIPT}
+
+    touch "${NET_UP_SCRIPT}"
+    touch "${NET_DOWN_SCRIPT}"
+
+    # Ensure the NET_UP script is *NOT* executable before it's finished
+    chmod 600 "${NET_UP_SCRIPT}"
+    echo '#!/bin/env bash' >> "${NET_UP_SCRIPT}"
+    echo "$(realpath "$ORIGINAL_SCRIPT_PATH") &" >> "${NET_UP_SCRIPT}"
+
+    # NET_UP_SCRIPT is finished so we make it executable
+    chmod 755 "${NET_UP_SCRIPT}"
+    echo "Installed $NET_UP_SCRIPT."
+
+    echo -e "#!/bin/bash"$'\n'"umount -a -t nfs4" > "${NET_DOWN_SCRIPT}"
+    chmod 755 "${NET_DOWN_SCRIPT}"
+    sync
+
+    # If we remounted the rootfs because it was read-only, we now
+    # undo our remount action and revert the mount to how we found it.
+    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,ro
+    return 0
+  fi
+}
+
+# Remove the mount-at-boot script
+
+function remove_mount_at_boot() {
+  if [ "${MOUNT_AT_BOOT}" != "yes" ]; then
+    local ORIGINAL_SCRIPT_PATH="$0"
+    local NET_UP_SCRIPT="/etc/network/if-up.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
+    local NET_DOWN_SCRIPT="/etc/network/if-down.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
+
+    # We need to write to the root filesystem so remount it
+    # read-write if it's currently read-only.
+    mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
+    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
+
+    [ -f ${NET_UP_SCRIPT} ]
+    rm ${NET_UP_SCRIPT}
+
+    [ -f ${NET_DOWN_SCRIPT} ]
+    rm ${NET_DOWN_SCRIPT}
+    sync
+
+    # If we remounted the rootfs because it was read-only, we now
+    # undo our remount action and revert the mount to how we found it.
+    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,ro
+    return 0
+  fi
+}
+
+# Remount the root filesystem if it's currently mounted read-only
+
+function remount_rootfs() {
+  mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
+  [ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
 }
 
 #=========BUSINESS LOGIC================================
+#
+# This part just calls the functions we define above
+# in a sequence. To keep things excruciatingly easy
+# to follow, any and all config checks are done *inside*
+# the functions themselves.
+#
+# Each of these steps will exit if things are not OK.
+#
+#=======================================================
 
-if [ "$(viable_config)" == "false" ]; then
-  echo "You need to set both SERVER and SERVER_PATH variables."
-  exit 1
-else
-  echo "Configuration data is complate."
-  echo "Server: $SERVER"
-  echo "Path  : $SERVER_PATH"
-fi
+# Ensure we are the root user
+as_root
 
-# Run this script only once after getting an IP address
-[ -f /tmp/nfs_mount.lock ] && exit 1
-touch /tmp/nfs_mount.lock
+# ..and that the script shall run only once per session.
+run_once
 
-if [ "${WAIT_FOR_SERVER}" == "yes" ]; then
-    echo -n "Waiting IP connectivity."
-    while [ "$(has_ip_address)" != "true" ]; do
-	sleep 1
-	echo -n "."
-    done
-    echo
-fi
+# Only cause changes if the configuration is viable.
+viable_config
 
-if [ "${WOL}" == "yes" ]; then
-    for REP in {1..16}; do
-	MAC+=$(echo ${SERVER_MAC})
-    done
-    echo -n "${MAC}" | xxd -r -u -p | socat - UDP-DATAGRAM:255.255.255.255:9,broadcast
-fi
+# We wake up the NFS-server if needed
+wake_up_nfs
 
-echo "Waiting for NFS server to be up."
+# ..and give it time to actually get dressed.
 wait_for_nfs
 
-ORIGINAL_SCRIPT_PATH="$0"
-if [ "$ORIGINAL_SCRIPT_PATH" == "bash" ]; then
-    ORIGINAL_SCRIPT_PATH=$(ps | grep "^ *$PPID " | grep -o "[^ ]*$")
-fi
-INI_PATH=${ORIGINAL_SCRIPT_PATH%.*}.ini
-if [ -f $INI_PATH ]; then
-    eval "$(cat $INI_PATH | tr -d '\r')"
-fi
+# Ensure the root filesystem is writable
+remount_rootfs
 
-NET_UP_SCRIPT="/etc/network/if-up.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
-NET_DOWN_SCRIPT="/etc/network/if-down.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
-if [ "${MOUNT_AT_BOOT}" ==  "yes" ]; then
-    WAIT_FOR_SERVER="yes"
-    if [ ! -f "${NET_UP_SCRIPT}" ] || [ ! -f "${NET_DOWN_SCRIPT}" ]; then
-	mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
-	[ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
-	echo -e "#!/bin/bash"$'\n\n'"$(realpath "$ORIGINAL_SCRIPT_PATH") &" > "${NET_UP_SCRIPT}"
-	chmod +x "${NET_UP_SCRIPT}"
-	echo -e "#!/bin/bash"$'\n\n'"umount -a -t nfs4" > "${NET_DOWN_SCRIPT}"
-	chmod +x "${NET_DOWN_SCRIPT}"
-	sync
-	[ "${RO_ROOT}" == "yes" ] && mount / -o remount,ro
-    fi
-else
-    if [ -f "${NET_UP_SCRIPT}" ] || [ -f "${NET_DOWN_SCRIPT}" ]; then
-	mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
-	[ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
-	rm "${NET_UP_SCRIPT}" > /dev/null 2>&1
-	rm "${NET_DOWN_SCRIPT}" > /dev/null 2>&1
-	sync
-	[ "${RO_ROOT}" == "yes" ] && mount / -o remount,ro
-    fi
-fi
+# Install/update the scripts to run at every reboot
+install_mount_at_boot
 
-if [ "${WAIT_FOR_SERVER}" == "yes" ]; then
-    echo -n "Waiting for ${SERVER}."
-    until [ "$(ping -4 -c1 ${SERVER} &>/dev/null ; echo $?)" = "0" ]; do
-	sleep 1
-	echo -n "."
-    done
-    echo
-fi
+# ..or remove them if that's what the user wants.
+remove_mount_at_boot
+
+exit 0
 
 SCRIPT_NAME=${ORIGINAL_SCRIPT_PATH##*/}
 SCRIPT_NAME=${SCRIPT_NAME%.*}
@@ -202,4 +284,3 @@ done
 
 echo "Done!"
 exit 0
-
