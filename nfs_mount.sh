@@ -154,12 +154,6 @@ if [ -f $INI_PATH ]; then
     eval "$(cat $INI_PATH | tr -d '\r')"
 fi
 
-if ! [ "$(zgrep "CONFIG_NFS_FS=" /proc/config.gz)" = "CONFIG_NFS_FS=y" ]; then
-    echo "The current Kernel doesn't support NFS."
-    echo "Please update your MiSTer Linux system."
-    exit 1
-fi
-
 NET_UP_SCRIPT="/etc/network/if-up.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
 NET_DOWN_SCRIPT="/etc/network/if-down.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
 if [ "${MOUNT_AT_BOOT}" ==  "yes" ]; then
