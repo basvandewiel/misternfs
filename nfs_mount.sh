@@ -33,6 +33,9 @@ SERVER=""
 # The path to mount from your NFS server, for example "/storage/games"
 SERVER_PATH=""
 
+# The number of seconds to wait before considering the server unreachable
+SERVER_TIMEOUT="30"
+
 # Wake up the server from above by using WOL (Wake On LAN)
 WOL="no"
 MAC="FFFFFFFFFFFF"
@@ -82,11 +85,41 @@ function viable_config() {
   fi
 }
 
+# Wait for the NFS server to be up
+
+wait_for_nfs() {
+    local PORTS=(2049 111)
+    local START=$(date +%s)
+
+    while true; do
+        for PORT in "${PORTS[@]}"; do
+            nc -z "$SERVER" "$PORT" >/dev/null 2>&1
+            if [ $? -eq 0 ]; then
+                echo "TCP connection to $SERVER on port $PORT succeeded!"
+                return 0
+            fi
+        done
+
+        sleep 1
+
+        local NOW=$(date +%s)
+        local ELAPSED=$((NOW - START))
+        if [ $ELAPSED -ge $SERVER_TIMEOUT ]; then
+            echo "Timeout waiting for TCP connection to $SERVER on ports ${PORTS[*]}"
+            return 1
+        fi
+    done
+}
+
 #=========BUSINESS LOGIC================================
 
 if [ "$(viable_config)" == "false" ]; then
   echo "You need to set both SERVER and SERVER_PATH variables."
   exit 1
+else
+  echo "Configuration data is complate."
+  echo "Server: $SERVER"
+  echo "Path  : $SERVER_PATH"
 fi
 
 # Run this script only once after getting an IP address
@@ -94,7 +127,7 @@ fi
 touch /tmp/nfs_mount.lock
 
 if [ "${WAIT_FOR_SERVER}" == "yes" ]; then
-    echo -n "Waiting for getting an IP address."
+    echo -n "Waiting IP connectivity."
     while [ "$(has_ip_address)" != "true" ]; do
 	sleep 1
 	echo -n "."
@@ -102,12 +135,15 @@ if [ "${WAIT_FOR_SERVER}" == "yes" ]; then
     echo
 fi
 
-if [ "${WOL}" = "yes" ]; then
+if [ "${WOL}" == "yes" ]; then
     for REP in {1..16}; do
 	MAC+=$(echo ${SERVER_MAC})
     done
     echo -n "${MAC}" | xxd -r -u -p | socat - UDP-DATAGRAM:255.255.255.255:9,broadcast
 fi
+
+echo "Waiting for NFS server to be up."
+wait_for_nfs
 
 ORIGINAL_SCRIPT_PATH="$0"
 if [ "$ORIGINAL_SCRIPT_PATH" == "bash" ]; then
@@ -116,16 +152,6 @@ fi
 INI_PATH=${ORIGINAL_SCRIPT_PATH%.*}.ini
 if [ -f $INI_PATH ]; then
     eval "$(cat $INI_PATH | tr -d '\r')"
-fi
-
-if [ "${SERVER}" == "" ]; then
-    echo "Please configure"
-    echo "this script"
-    echo "either editing"
-    echo "${ORIGINAL_SCRIPT_PATH##*/}"
-    echo "or making a new"
-    echo "${INI_PATH##*/}"
-    exit 1
 fi
 
 if ! [ "$(zgrep "CONFIG_NFS_FS=" /proc/config.gz)" = "CONFIG_NFS_FS=y" ]; then
@@ -182,3 +208,4 @@ done
 
 echo "Done!"
 exit 0
+
