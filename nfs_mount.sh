@@ -49,9 +49,9 @@ WAIT_FOR_SERVER="yes"
 # it will create start/kill scripts in /etc/network/if-up.d and /etc/network/if-down.d.
 MOUNT_AT_BOOT="yes"
 
+#=========NO USER-SERVICEABLE PARTS BELOW THIS LINE=====
 
-
-#=========CODE STARTS HERE=========
+#=========FUNCTION LIBRARY==============================
 
 # Check if we have an IPv4 address on any of the interfaces that is
 # not a local loopback (127.0.0.0/8) or link-local (169.254.0.0/16) adddress.
@@ -64,6 +64,30 @@ function has_ip_address() {
     echo "false"
   fi
 }
+
+# Check if the script's configuration is minimally viable
+
+function viable_config() {
+  local VIABLE="false"
+  if [ "${SERVER}" != "" ]; then
+    VIABLE="true"
+  fi
+  if [ "${SERVER_PATH}" != "" ]; then
+    VIABLE="true"
+  fi
+  if [ "${VIABLE}" == "true" ]; then
+    echo "true"
+  else
+    echo "false"
+  fi
+}
+
+#=========BUSINESS LOGIC================================
+
+if [ "$(viable_config)" == "false" ]; then
+  echo "You need to set both SERVER and SERVER_PATH variables."
+  exit 1
+fi
 
 # Run this script only once after getting an IP address
 [ -f /tmp/nfs_mount.lock ] && exit 1
