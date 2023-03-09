@@ -30,6 +30,9 @@
 # Your NFS Server, i.e. your NAS name or it's IP address.
 SERVER=""
 
+# The path to mount from your NFS server, for example "/storage/games"
+SERVER_PATH=""
+
 # Wake up the server from above by using WOL (Wake On LAN)
 WOL="no"
 MAC="FFFFFFFFFFFF"
@@ -144,7 +147,7 @@ fi
 SCRIPT_NAME=${ORIGINAL_SCRIPT_PATH##*/}
 SCRIPT_NAME=${SCRIPT_NAME%.*}
 mkdir -p "/tmp/${SCRIPT_NAME}" > /dev/null 2>&1
-/bin/busybox mount -t nfs4 ${SERVER}:/media/soft/emu /tmp/${SCRIPT_NAME} -o ${MOUNT_OPTIONS}
+/bin/busybox mount -t nfs4 ${SERVER}:${SERVER_PATH} /tmp/${SCRIPT_NAME} -o ${MOUNT_OPTIONS}
 IFS=$'\n'
 for LDIR in $(ls /tmp/${SCRIPT_NAME}); do
     if [ -d "/media/fat/${LDIR}" ] && [ -d "/tmp/${SCRIPT_NAME}/${LDIR}" ] && ! [ $(mount | grep "/media/fat/${LDIR} type nfs4") ]; then
