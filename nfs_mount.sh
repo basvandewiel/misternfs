@@ -59,8 +59,8 @@ MOUNT_AT_BOOT="yes"
 # Are we running as root?
 
 function as_root() {
-  if [ `whoami` != "root" ]; then
-    echo "This script must be run as root. Exiting."
+  if [ "$(id -u)" != "0" ]; then
+    echo "This script must be run as root. Please run again with sudo or as root user. Exiting."
     exit 1
   fi
 }
@@ -101,15 +101,8 @@ function has_ip_address() {
 # Check if the script's configuration is minimally viable
 
 function viable_config() {
-  local VIABLE="false"
-  if [ "${SERVER}" != "" ]; then
-    VIABLE="true"
-  fi
-  if [ "${SERVER_PATH}" != "" ]; then
-    VIABLE="true"
-  fi
-  if [ "${VIABLE}" == "false" ]; then
-    echo "You must set the SERVER and SERVER_PATH variables before proceeding. Exiting."
+  if [ -z "$SERVER" ] || [ -z "$SERVER_PATH" ]; then
+    echo "SERVER and SERVER_PATH must be set. Exiting."
     exit 1
   fi
 }
@@ -126,87 +119,82 @@ function wake_up_nfs() {
 }
 
 # Wait for the NFS server to be up
-# We exit hard on timeout
 
 function wait_for_nfs() {
     if [ "${WAIT_FOR_SERVER}" == "true" ]; then
-      local PORTS=(2049 111)
-      local START=$(date +%s)
+        local PORTS=(2049 111)
+        local START=$(date +%s)
+        local ELAPSED=0
 
-      while true; do
-          for PORT in "${PORTS[@]}"; do
-              nc -z "$SERVER" "$PORT" >/dev/null 2>&1
-              if [ $? -eq 0 ]; then
-                  echo "NFS-server $SERVER is alive."
-                  return 0
-              fi
-          done
+        while [ $ELAPSED -lt $SERVER_TIMEOUT ]; do
+            for PORT in "${PORTS[@]}"; do
+                if nc -z "$SERVER" "$PORT" >/dev/null 2>&1; then
+                    echo "NFS server $SERVER is up."
+                    return 0
+                fi
+            done
 
-          sleep 1
+            sleep 1
+            ELAPSED=$(($(date +%s) - $START))
+        done
 
-          local NOW=$(date +%s)
-          local ELAPSED=$((NOW - START))
-          if [ $ELAPSED -ge $SERVER_TIMEOUT ]; then
-              echo "Timeout while waiting $SERVER_TIMEOUT seconds for NFS-server $SERVER.}"
-              exit 1
-          fi
-      done
+        echo "Timeout while waiting for NFS server $SERVER."
+        exit 1
     fi
+
     return 0
 }
+
 
 # Install the mount-at-boot scripts
 
 function install_mount_at_boot() {
-  if [ "${MOUNT_AT_BOOT}" == "yes" ]; then
+  # Enable strict error checking
+  set -euo pipefail
 
-    # We need to write to the root filesystem so remount it
-    # read-write if it's currently read-only.
-    mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
-    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
-
-    local ORIGINAL_SCRIPT_PATH="$0"
-    local NET_UP_SCRIPT="/etc/network/if-up.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
-    local NET_DOWN_SCRIPT="/etc/network/if-down.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
-
-    # Make sure we have a sane working environment
-    [ ! -d /etc/network/if-up.d ]
-    mkdir -p /etc/network/if-up.d
-
-    [ ! -d /etc/network/if-down.d ]
-    mkdir -p /etc/network/if-down.d
-
-    # Permissions should be in a known-good state
-    chmod 755 /etc/network/if-up.d
-    chmod 755 /etc/network/if-down.d
-    chmod 775 /etc/network
-    chmod 775 /etc
-
-    # We always recreate this script because we have no way to track changes to it
-    [ -f ${NET_UP_SCRIPT} ]
-    rm ${NET_UP_SCRIPT}
-
-    touch "${NET_UP_SCRIPT}"
-    touch "${NET_DOWN_SCRIPT}"
-
-    # Ensure the NET_UP script is *NOT* executable before it's finished
-    chmod 600 "${NET_UP_SCRIPT}"
-    echo '#!/bin/env bash' >> "${NET_UP_SCRIPT}"
-    echo "$(realpath "$ORIGINAL_SCRIPT_PATH") &" >> "${NET_UP_SCRIPT}"
-
-    # NET_UP_SCRIPT is finished so we make it executable
-    chmod 755 "${NET_UP_SCRIPT}"
-
-    echo -e "#!/bin/bash"$'\n'"umount -a -t nfs4" > "${NET_DOWN_SCRIPT}"
-    chmod 755 "${NET_DOWN_SCRIPT}"
-    sync
-
-    # If we remounted the rootfs because it was read-only, we now
-    # undo our remount action and revert the mount to how we found it.
-    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,ro
+  # Check if MOUNT_AT_BOOT is set to "yes"
+  if [ "${MOUNT_AT_BOOT:-}" != "yes" ]; then
     return 0
   fi
+
+  # Remount root filesystem read-write if it's currently read-only
+  if mount | grep -q "on / .*[(,]ro[,$]"; then
+    mount -o remount,rw /
+    readonly ROOTFS_REMOUNTED="yes"
+  fi
+
+  # Set up scripts to run on network interface up/down events
+  SCRIPT_PATH="$(realpath "$0")"
+  SCRIPT_NAME="$(basename "${SCRIPT_PATH%.*}")"
+  NET_UP_SCRIPT="/etc/network/if-up.d/${SCRIPT_NAME}"
+  NET_DOWN_SCRIPT="/etc/network/if-down.d/${SCRIPT_NAME}"
+
+  # Ensure directories for scripts exist and have appropriate permissions
+  mkdir -p /etc/network/if-up.d /etc/network/if-down.d
+  chmod 755 /etc/network /etc/network/if-up.d /etc/network/if-down.d
+
+  # Create network interface up script
+  cat >"${NET_UP_SCRIPT}" <<EOF
+#!/bin/bash
+"${SCRIPT_PATH}" &
+EOF
+  chmod 755 "${NET_UP_SCRIPT}"
+
+  # Create network interface down script
+  cat >"${NET_DOWN_SCRIPT}" <<EOF
+#!/bin/bash
+umount -a -t nfs4
+EOF
+  chmod 755 "${NET_DOWN_SCRIPT}"
+
+  # Remount root filesystem read-only if it was remounted earlier
+  if [ "${ROOTFS_REMOUNTED:-}" == "yes" ]; then
+    mount -o remount,ro /
+  fi
+
+  return 0
 }
+
 
 # Remove the mount-at-boot script
 
@@ -218,19 +206,25 @@ function remove_mount_at_boot() {
 
     # We need to write to the root filesystem so remount it
     # read-write if it's currently read-only.
-    mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
-    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
+    if mount | grep -q "on / .*[(,]ro[,$]"; then
+      RO_ROOT="yes"
+      mount / -o remount,rw
+    fi
 
-    [ -f ${NET_UP_SCRIPT} ]
-    rm ${NET_UP_SCRIPT}
+    if [ -f "${NET_UP_SCRIPT}" ]; then
+      rm "${NET_UP_SCRIPT}"
+    fi
 
-    [ -f ${NET_DOWN_SCRIPT} ]
-    rm ${NET_DOWN_SCRIPT}
+    if [ -f "${NET_DOWN_SCRIPT}" ]; then
+      rm "${NET_DOWN_SCRIPT}"
+    fi
     sync
 
     # If we remounted the rootfs because it was read-only, we now
     # undo our remount action and revert the mount to how we found it.
-    [ "${RO_ROOT}" == "yes" ] && mount / -o remount,ro
+    if [ "${RO_ROOT}" == "yes" ]; then
+      mount / -o remount,ro
+    fi
     return 0
   fi
 }
