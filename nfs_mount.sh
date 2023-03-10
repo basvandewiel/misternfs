@@ -76,6 +76,16 @@ function run_once() {
 }
 
 
+# Load script configuration from an INI file.
+# ..which isn't really an INI file but just a list of Bash vars
+function load_ini() {
+ local SCRIPT_PATH="$(realpath "$0")"
+ local INI_FILE=${SCRIPT_PATH%.*}.ini
+ if [ -e "$INI_FILE" ]; then
+   eval "$(cat $INI_FILE | tr -d '\r')"
+ fi
+}
+
 # Check if we have an IPv4 address on any of the interfaces that is
 # not a local loopback (127.0.0.0/8) or link-local (169.254.0.0/16) adddress.
 
@@ -186,7 +196,6 @@ function install_mount_at_boot() {
 
     # NET_UP_SCRIPT is finished so we make it executable
     chmod 755 "${NET_UP_SCRIPT}"
-    echo "Installed $NET_UP_SCRIPT."
 
     echo -e "#!/bin/bash"$'\n'"umount -a -t nfs4" > "${NET_DOWN_SCRIPT}"
     chmod 755 "${NET_DOWN_SCRIPT}"
@@ -242,6 +251,9 @@ as_root
 
 # ..and that the script shall run only once per session.
 run_once
+
+# Load configuration from the .ini file if we have one.
+load_ini
 
 # Only cause changes if the configuration is viable.
 viable_config
