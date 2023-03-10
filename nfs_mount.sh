@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Copyright 20221 Oliver "RealLarry" Jaksch
+# Copyright 2022 Oliver "RealLarry" Jaksch
 
 # You can download the latest version of this script from:
 # https://github.com/MiSTer-devel/CIFS_MiSTer
