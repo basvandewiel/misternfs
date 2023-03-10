@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Copyright 20221 Oliver "RealLarry" Jaksch
+# Copyright 2022 Oliver "RealLarry" Jaksch
 
 # You can download the latest version of this script from:
 # https://github.com/MiSTer-devel/CIFS_MiSTer
@@ -235,6 +235,32 @@ function remove_mount_at_boot() {
   fi
 }
 
+# Perform the actual mount operation supporting only NFSv4 for now
+
+function mount_nfs() {
+  set -e
+  local ORIGINAL_SCRIPT_PATH="$0"
+  local SCRIPT_NAME="${ORIGINAL_SCRIPT_PATH##*/}"
+  SCRIPT_NAME="${SCRIPT_NAME%.*}"
+  if ! mkdir -p "/tmp/${SCRIPT_NAME}" >/dev/null 2>&1; then
+    echo "Error: failed to create directory /tmp/${SCRIPT_NAME}"
+    exit 1
+  fi
+  if ! mount -t nfs4 "${SERVER}:${SERVER_PATH}" "/tmp/${SCRIPT_NAME}" -o "${MOUNT_OPTIONS}"; then
+    echo "Error: failed to mount NFS share ${SERVER}:${SERVER_PATH} to /tmp/${SCRIPT_NAME}"
+    exit 1
+  fi
+  find "/tmp/${SCRIPT_NAME}" -mindepth 1 -maxdepth 1 -type d | while read -r LDIR; do
+    LDIR="${LDIR##*/}"
+    if [ -d "/media/fat/${LDIR}" ] && ! mount | grep -q "/media/fat/${LDIR}"; then
+      if ! mount -o bind "/tmp/${SCRIPT_NAME}/${LDIR}" "/media/fat/${LDIR}"; then
+        echo "Error: failed to mount directory /tmp/${SCRIPT_NAME}/${LDIR} to /media/fat/${LDIR}"
+        exit 1
+      fi
+    fi
+  done
+}
+
 #=========BUSINESS LOGIC================================
 #
 # This part just calls the functions we define above
@@ -270,19 +296,6 @@ install_mount_at_boot
 # ..or remove them if that's what the user wants.
 remove_mount_at_boot
 
-exit 0
-
-SCRIPT_NAME=${ORIGINAL_SCRIPT_PATH##*/}
-SCRIPT_NAME=${SCRIPT_NAME%.*}
-mkdir -p "/tmp/${SCRIPT_NAME}" > /dev/null 2>&1
-/bin/busybox mount -t nfs4 ${SERVER}:${SERVER_PATH} /tmp/${SCRIPT_NAME} -o ${MOUNT_OPTIONS}
-IFS=$'\n'
-for LDIR in $(ls /tmp/${SCRIPT_NAME}); do
-    if [ -d "/media/fat/${LDIR}" ] && [ -d "/tmp/${SCRIPT_NAME}/${LDIR}" ] && ! [ $(mount | grep "/media/fat/${LDIR} type nfs4") ]; then
-        echo "Mounting ${LDIR}"
-        mount -o bind "/tmp/${SCRIPT_NAME}/${LDIR}" "/media/fat/${LDIR}"
-    fi
-done
-
-echo "Done!"
+# Finally, we mount the NFS filesystem and be done with it.
+mount_nfs
 exit 0
