@@ -226,13 +226,6 @@ function remove_mount_at_boot() {
   fi
 }
 
-# Remount the root filesystem if it's currently mounted read-only
-
-function remount_rootfs() {
-  mount | grep "on / .*[(,]ro[,$]" -q && RO_ROOT="yes"
-  [ "${RO_ROOT}" == "yes" ] && mount / -o remount,rw
-}
-
 #=========BUSINESS LOGIC================================
 #
 # This part just calls the functions we define above
@@ -258,9 +251,6 @@ wake_up_nfs
 
 # ..and give it time to actually get dressed.
 wait_for_nfs
-
-# Ensure the root filesystem is writable
-remount_rootfs
 
 # Install/update the scripts to run at every reboot
 install_mount_at_boot
