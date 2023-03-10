@@ -92,9 +92,10 @@ function load_ini() {
 function has_ip_address() {
   ip addr show | grep 'inet ' | grep -vE '127.|169.254.' >/dev/null 2>&1
   if [[ $? -eq 0 ]]; then
-    echo "true"
+    return 0
   else
-    echo "false"
+    echo "Network connectivity is probably not OK. Exiting."
+    exit 1
   fi
 }
 
@@ -275,8 +276,11 @@ run_once
 # Load configuration from the .ini file if we have one.
 load_ini
 
-# Only cause changes if the configuration is viable.
+# Only cause changes if the configuration is viable..
 viable_config
+
+# ..and our network seems to be working.
+has_ip_address
 
 # We wake up the NFS-server if needed
 wake_up_nfs
