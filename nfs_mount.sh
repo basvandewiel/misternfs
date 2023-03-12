@@ -193,6 +193,7 @@ EOF
 # Remove the mount-at-boot script
 
 function remove_mount_at_boot() {
+  RO_ROOT="no"
   if [ "${MOUNT_AT_BOOT}" != "yes" ]; then
     local ORIGINAL_SCRIPT_PATH="$0"
     local NET_UP_SCRIPT="/etc/network/if-up.d/$(basename ${ORIGINAL_SCRIPT_PATH%.*})"
