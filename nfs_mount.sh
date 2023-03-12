@@ -263,9 +263,6 @@ function mount_nfs() {
 # Ensure we are the root user
 as_root
 
-# ..and that the we haven't already got NFS filesystems present.
-no_existing_nfs
-
 # Load configuration from the .ini file if we have one.
 load_ini
 
@@ -286,6 +283,9 @@ install_mount_at_boot
 
 # ..or remove them if that's what the user wants.
 remove_mount_at_boot
+
+# Only ensure we haven't already got NFS filesystems present
+no_existing_nfs
 
 # Finally, we mount the NFS filesystem and be done with it.
 mount_nfs
