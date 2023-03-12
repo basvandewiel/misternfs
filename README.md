@@ -10,8 +10,8 @@ into the mainline MiSTer project and live on there.
 
 ## Installing the script
 
-Place the nfs_mount.sh script inside your MiSTer's /media/fat/Scripts directory. You can run
-it from there through the OSD or from a (remote) Linux shell as you see fit.
+Place the ```nfs_mount.sh``` and ```nfs_unmount.sh``` scripts inside your MiSTer's ```/media/fat/Scripts``` 
+directory. You can run it from there through the OSD or from a (remote) Linux shell as you see fit.
 
 ## Configuration
 
@@ -138,11 +138,7 @@ images for cores like PCXT/AO486 or Amiga. Those simulated machines expect their
 writable at all times and things get hairy if they're not.
 
 This is a fact of life when using a datacenter protocol with an appliance and will also happen if
-you rudely hang up a CIFS server, so there's no real recourse against this. A reasonable habit to
-keep this to a minimum would be to wait up to 30 seconds from inside the Menu core or any other core
-that doesn't write to the disk before shutting down the device. Any pending writes will have been
-flushed to the server by then and you'll be safe-ish.. no guarantees though!
-
-The ```MOUNT_AT_BOOT``` flag installs a script that cleanly unmounts your NFS share at system shutdown.
-
-A script that can trigger this same action from the OSD is on the to-do list.
+you rudely hang up a CIFS server, so there's no real recourse against this. You really should always
+call the ```nfs_unmount.sh``` script from the ```Scripts``` folder before shutting down your MiSTer. 
+The ```MOUNT_AT_BOOT``` flag installs a script that cleanly unmounts your NFS share upon clean
+system shutdown. The main problem with that is that clean system shutdowns are so rare on MiSTer.
