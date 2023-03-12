@@ -13,6 +13,39 @@ into the mainline MiSTer project and live on there.
 Place the ```nfs_mount.sh``` and ```nfs_unmount.sh``` scripts inside your MiSTer's ```/media/fat/Scripts``` 
 directory. You can run it from there through the OSD or from a (remote) Linux shell as you see fit.
 
+## What it does: ..here be dragons
+
+These two scripts do what they say on the box: mount and unmount your NFS-provided network storage. When
+the sanity checks work out, the actual mount works as follows.
+
+  1. The script mounts your ```SERVER_PATH``` onto ```/tmp/nfs_mount``` on your MiSTer.
+  2. It then looks for directories inside your ```/tmp/nfs_mount``` and compares them to the directories
+     you have in ```/media/fat```.
+  3. If it finds directories that appear in both location, the NFS-version gets mounted on top of the
+     existing directory in ```/media/fat```.
+
+### Wait.. what!?
+
+Let's say you have a directory on your NAS named ```/storage/MiSTer``` that you export over NFS, then
+that will end up mounted at ```/tmp/nfs_mount``` on your MiSTer and that will be that if it's empty.
+
+If you have a ```games``` directory *inside* your ```/storage/MiSTer``` on the NAS, then the script will
+pick up on that. If and *only* if you *also* have an pre-existing ```/media/fat/games``` directory, the
+remote version will be mounted *on top of* your existing ```/media/fat/games```.
+
+This goes for any and all directories that appear in *both* places at the time time script runs, which is once
+at system boot and/or on demand when you run it from a shell or the MiSTer's OSD.
+
+This trick permits you to keep your cores on the SD-card by not having ```/media/fat/_Arcade``` etc. on
+your NAS. If it's not found on your NAS, then the directory won't be overlaid with anything and just left
+alone as-is on your SD-card.
+
+You can use this to keep a small-ish ```/media/fat/games``` directory on your SD-card for portable gaming fun,
+while having the entire history of retrogaming and a plethora of Windows 95 installations on your NAS at home
+by overlaying ```/media/fat/games``` via NFS.
+
+I told you there'd be dragons..
+
 ## Configuration
 
 The preferred method for configuring the script is through an INI file that sits in the same
@@ -41,7 +74,10 @@ This example would try to mount the ```/storage/mister``` path from a server tha
 IP-address ```192.168.0.4```. It'd install scripts to run at every boot and the MOUNT_OPTIONS
 mount the directory as read-only (see below).
 
-## Concerning NFS
+You can also modify the script itself, but that'll get clobbered when you update the script.
+Using an INI file keeps the script and its configuration separate, which is good practice.
+
+## Concerning NFS: more dragons
 
 The NFS protocol is ancient and it was conceived in the days of big-iron UNIX machines in
 well-tended datacenters where grey-haired veteran geeks would carefully nurture, cultivate
