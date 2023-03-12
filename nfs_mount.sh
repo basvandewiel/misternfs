@@ -241,7 +241,7 @@ function mount_nfs() {
     echo "Error: failed to create directory /tmp/${SCRIPT_NAME}"
     exit 1
   fi
-  if ! mount -t nfs4 "${SERVER}:${SERVER_PATH}" "/tmp/${SCRIPT_NAME}" -o "${MOUNT_OPTIONS}"; then
+  if ! /usr/bin/busybox mount -t nfs4 "${SERVER}:${SERVER_PATH}" "/tmp/${SCRIPT_NAME}" -o "${MOUNT_OPTIONS}"; then
     echo "Error: failed to mount NFS share ${SERVER}:${SERVER_PATH} to /tmp/${SCRIPT_NAME}"
     exit 1
   fi
