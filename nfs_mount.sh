@@ -65,16 +65,14 @@ function as_root() {
   fi
 }
 
-# Run only once
+# Check for existing NFS mounts
 
-function run_once() {
-  if [ -f /tmp/nfs_mount.lock ]; then
-    echo "This script may run only once per session. Please reboot your MiSTer first."
+function no_existing_nfs() {
+  if mount | grep -q nfs; then
+    echo "Found mounted NFS filesystems. Aborting."
     exit 1
   fi
-  touch /tmp/nfs_mount.lock
 }
-
 
 # Load script configuration from an INI file.
 # ..which isn't really an INI file but just a list of Bash vars
@@ -270,8 +268,8 @@ function mount_nfs() {
 # Ensure we are the root user
 as_root
 
-# ..and that the script shall run only once per session.
-run_once
+# ..and that the we haven't already got NFS filesystems present.
+no_existing_nfs
 
 # Load configuration from the .ini file if we have one.
 load_ini
