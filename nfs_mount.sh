@@ -175,7 +175,7 @@ function install_mount_at_boot() {
   # Create network interface up script
   cat >"${NET_UP_SCRIPT}" <<EOF
 #!/bin/bash
-"${SCRIPT_PATH}" &
+${SCRIPT_PATH} &
 EOF
   chmod 755 "${NET_UP_SCRIPT}"
 
