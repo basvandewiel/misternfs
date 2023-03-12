@@ -44,10 +44,6 @@ SERVER_MAC="00:11:22:33:44:55"
 # Optional additional mount options.
 MOUNT_OPTIONS="noatime"
 
-# "yes" in order to wait for the CIFS server to be reachable;
-# useful when using this script at boot time.
-WAIT_FOR_SERVER="yes"
-
 # "yes" for automounting NFS shares at boot time;
 # it will create start/kill scripts in /etc/network/if-up.d and /etc/network/if-down.d.
 MOUNT_AT_BOOT="yes"
@@ -120,28 +116,24 @@ function wake_up_nfs() {
 # Wait for the NFS server to be up
 
 function wait_for_nfs() {
-    if [ "${WAIT_FOR_SERVER}" == "true" ]; then
-        local PORTS=(2049 111)
-        local START=$(date +%s)
-        local ELAPSED=0
+  local PORTS=(2049 111)
+  local START=$(date +%s)
+  local ELAPSED=0
 
-        while [ $ELAPSED -lt $SERVER_TIMEOUT ]; do
-            for PORT in "${PORTS[@]}"; do
-                if nc -z "$SERVER" "$PORT" >/dev/null 2>&1; then
-                    echo "NFS server $SERVER is up."
-                    return 0
-                fi
-            done
+  while [ $ELAPSED -lt $SERVER_TIMEOUT ]; do
+    for PORT in "${PORTS[@]}"; do
+      if nc -z "$SERVER" "$PORT" >/dev/null 2>&1; then
+        echo "NFS server $SERVER is up."
+        return 0
+      fi
+    done
 
-            sleep 1
-            ELAPSED=$(($(date +%s) - $START))
-        done
+  sleep 1
+  ELAPSED=$(($(date +%s) - $START))
+  done
 
-        echo "Timeout while waiting for NFS server $SERVER."
-        exit 1
-    fi
-
-    return 0
+  echo "Timeout while waiting for NFS server $SERVER."
+  exit 1
 }
 
 
