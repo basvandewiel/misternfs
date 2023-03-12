@@ -44,10 +44,6 @@ SERVER_MAC="00:11:22:33:44:55"
 # Optional additional mount options.
 MOUNT_OPTIONS="noatime"
 
-# "yes" in order to wait for the CIFS server to be reachable;
-# useful when using this script at boot time.
-WAIT_FOR_SERVER="yes"
-
 # "yes" for automounting NFS shares at boot time;
 # it will create start/kill scripts in /etc/network/if-up.d and /etc/network/if-down.d.
 MOUNT_AT_BOOT="yes"
@@ -60,7 +56,7 @@ MOUNT_AT_BOOT="yes"
 
 function as_root() {
   if [ "$(id -u)" != "0" ]; then
-    echo "This script must be run as root. Please run again with sudo or as root user. Exiting."
+    /usr/bin/logger "This script must be run as root. Please run again with sudo or as root user. Exiting."
     exit 1
   fi
 }
@@ -69,7 +65,7 @@ function as_root() {
 
 function no_existing_nfs() {
   if mount | grep -q nfs; then
-    echo "Found mounted NFS filesystems. Aborting."
+    /usr/bin/logger "Found mounted NFS filesystems. Aborting."
     exit 1
   fi
 }
@@ -88,20 +84,23 @@ function load_ini() {
 # not a local loopback (127.0.0.0/8) or link-local (169.254.0.0/16) adddress.
 
 function has_ip_address() {
-  ip addr show | grep 'inet ' | grep -vE '127.|169.254.' >/dev/null 2>&1
-  if [[ $? -eq 0 ]]; then
-    return 0
-  else
-    echo "Network connectivity is probably not OK. Exiting."
-    exit 1
-  fi
+  local start_time=$(date +%s)
+  while [[ $(($(date +%s) - $start_time)) -lt 30 ]]; do
+    ip addr show | grep 'inet ' | grep -vE '127.|169.254.' >/dev/null 2>&1
+    if [[ $? -eq 0 ]]; then
+      return 0
+    fi
+    sleep 1
+  done
+  /usr/bin/logger "Failed to obtain an IP address within the time limit. Exiting."
+  exit 1
 }
 
 # Check if the script's configuration is minimally viable
 
 function viable_config() {
   if [ -z "$SERVER" ] || [ -z "$SERVER_PATH" ]; then
-    echo "SERVER and SERVER_PATH must be set. Exiting."
+    /usr/bin/logger "SERVER and SERVER_PATH must be set. Exiting."
     exit 1
   fi
 }
@@ -120,28 +119,24 @@ function wake_up_nfs() {
 # Wait for the NFS server to be up
 
 function wait_for_nfs() {
-    if [ "${WAIT_FOR_SERVER}" == "true" ]; then
-        local PORTS=(2049 111)
-        local START=$(date +%s)
-        local ELAPSED=0
+  local PORTS=(2049 111)
+  local START=$(date +%s)
+  local ELAPSED=0
 
-        while [ $ELAPSED -lt $SERVER_TIMEOUT ]; do
-            for PORT in "${PORTS[@]}"; do
-                if nc -z "$SERVER" "$PORT" >/dev/null 2>&1; then
-                    echo "NFS server $SERVER is up."
-                    return 0
-                fi
-            done
+  while [ $ELAPSED -lt $SERVER_TIMEOUT ]; do
+    for PORT in "${PORTS[@]}"; do
+      if nc -z "$SERVER" "$PORT" >/dev/null 2>&1; then
+        /usr/bin/logger "NFS server $SERVER is up."
+        return 0
+      fi
+    done
 
-            sleep 1
-            ELAPSED=$(($(date +%s) - $START))
-        done
+  sleep 1
+  ELAPSED=$(($(date +%s) - $START))
+  done
 
-        echo "Timeout while waiting for NFS server $SERVER."
-        exit 1
-    fi
-
-    return 0
+  /usr/bin/logger "Timeout while waiting for NFS server $SERVER."
+  exit 1
 }
 
 
@@ -175,7 +170,7 @@ function install_mount_at_boot() {
   # Create network interface up script
   cat >"${NET_UP_SCRIPT}" <<EOF
 #!/bin/bash
-"${SCRIPT_PATH}" &
+${SCRIPT_PATH} &
 EOF
   chmod 755 "${NET_UP_SCRIPT}"
 
@@ -236,18 +231,18 @@ function mount_nfs() {
   local SCRIPT_NAME="${ORIGINAL_SCRIPT_PATH##*/}"
   SCRIPT_NAME="${SCRIPT_NAME%.*}"
   if ! mkdir -p "/tmp/${SCRIPT_NAME}" >/dev/null 2>&1; then
-    echo "Error: failed to create directory /tmp/${SCRIPT_NAME}"
+    /usr/bin/logger "Error: failed to create directory /tmp/${SCRIPT_NAME}"
     exit 1
   fi
   if ! /usr/bin/busybox mount -t nfs4 "${SERVER}:${SERVER_PATH}" "/tmp/${SCRIPT_NAME}" -o "${MOUNT_OPTIONS}"; then
-    echo "Error: failed to mount NFS share ${SERVER}:${SERVER_PATH} to /tmp/${SCRIPT_NAME}"
+    /usr/bin/logger "Error: failed to mount NFS share ${SERVER}:${SERVER_PATH} to /tmp/${SCRIPT_NAME}"
     exit 1
   fi
   find "/tmp/${SCRIPT_NAME}" -mindepth 1 -maxdepth 1 -type d | while read -r LDIR; do
     LDIR="${LDIR##*/}"
     if [ -d "/media/fat/${LDIR}" ] && ! mount | grep -q "/media/fat/${LDIR}"; then
       if ! mount -o bind "/tmp/${SCRIPT_NAME}/${LDIR}" "/media/fat/${LDIR}"; then
-        echo "Error: failed to mount directory /tmp/${SCRIPT_NAME}/${LDIR} to /media/fat/${LDIR}"
+        /usr/bin/logger "Error: failed to mount directory /tmp/${SCRIPT_NAME}/${LDIR} to /media/fat/${LDIR}"
         exit 1
       fi
     fi
