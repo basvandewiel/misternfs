@@ -44,8 +44,6 @@ You can use this to keep a small-ish ```/media/fat/games``` directory on your SD
 while having the entire history of retrogaming and a plethora of Windows 95 installations on your NAS at home
 by overlaying ```/media/fat/games``` via NFS.
 
-I told you there'd be dragons..
-
 ## Configuration
 
 The preferred method for configuring the script is through an INI file that sits in the same
@@ -108,6 +106,16 @@ began with teletypes and punch cards. You'll need to be more careful with it tha
 the plain local SD card or you'll run into issues that may seem hard to debug at first. Here's a few
 pointers.
 
+### Case sensitivity
+
+MiSTer runs Linux, which is generally case-sensitive but not in the MiSTer's default case using just
+the SD-card for storage. The SD-card is formatted using exFAT, which is case-insensitive. NFS, on the
+other hand, generally has a Linux/UNIX backing store which *does* care about case. This means that on
+your SD-card ```NeoGeo``` and ```NEOGEO``` are the same thing, while they're quite distinct via NFS.
+
+Ensure that you test your update scripts etc. carefully before moving your stuff over to an NFS-based
+network share.
+
 ### Can't write to my network share
 
 The MiSTer device runs everything as the ```root``` user. This is perfectly valid for an appliance
@@ -150,6 +158,24 @@ permissions set on them.
 
 You're dealing with the dark underbelly of the 1970's world of UNIX here. Learn it, it's fun! Or use
 something like a USB-drive or a bigger SD-card instead.
+
+## Combinations with USB and CIFS storage
+
+MiSTer provides alternative options for storage next to NFS. At the time of this writing, these options
+have not been unified into any kind of Grand Unifying Storage Architecture for the MiSTer so this is
+the observed behavior from initial testing.
+
+USB trumps everything. When you attach USB-storage, its contents get overlaid onto everything else
+including CIFS and NFS storage options.
+
+CIFS and NFS do coexist fairly peacefully since they both have different mechanics of exposing their
+contents to the user. The NFS-script overlays the NFS mounts onto the existing structures on the SD-card,
+while CIFS exposes its own ```cifs``` directory which the cores prefer when they detect it, giving you
+the option of navigating to the SD-card directory structures that sit alongside it.
+
+At this point in time, these items are simply facts of life. If/when NFS sees any significat uptake it'd
+probably be a good idea to unify alternative storage options into a predictable mechanism. For now the
+user should note that these differences exist.
 
 ## General wonkiness after turning my MiSTer off
 
