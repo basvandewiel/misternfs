@@ -50,14 +50,14 @@ The preferred method for configuring the script is through an INI file that sits
 directory as the main script itself and is named ```nfs_mount.ini```. In this file you can
 define a number of variables of which ```SERVER``` and ```SERVER_PATH``` are mandatory.
 
-| Variable name | Description |
-|---------------|-------------|
-| SERVER        | DNS-name or IP-address of your NFS-server. |
-| SERVER_PATH   | The remote directory to mount onto your MiSTer. |
-| SERVER_TIMEOUT | Number of seconds to wait for the NFS-server to become reachable. |
-| MOUNT_AT_BOOT | Set to "yes" if you want this script to run at every startup of your MiSTer. |
-| MOUNT_OPTIONS | Client-side mount options for your NFS-mount. |
-| WOL | WakeOnLAN: set to "yes" to send a wake-up packet to your NFS-server to wake it up. |
+| Variable name  | Default   | Description |
+|----------------|-----------|-------------|
+| SERVER         | Undefined | DNS-name or IP-address of your NFS-server. |
+| SERVER_PATH    | Undefined | The remote directory to mount onto your MiSTer. |
+| SERVER_TIMEOUT | 60        | Number of seconds to wait for both IP-connectivity and the NFS-server to become reachable. |
+| MOUNT_AT_BOOT  | yes       | Set to "yes" if you want this script to run at every startup of your MiSTer. |
+| MOUNT_OPTIONS  | "noatime" | Client-side mount options for your NFS-mount. |
+| WOL            | "no       | WakeOnLAN: set to "yes" to send a wake-up packet to your NFS-server to wake it up. |
 
 An example for the contents of a valid INI file would be:
 
@@ -74,6 +74,9 @@ mount the directory as read-only (see below).
 
 You can also modify the script itself, but that'll get clobbered when you update the script.
 Using an INI file keeps the script and its configuration separate, which is good practice.
+
+Just to be 100% clear here: you *must* define ```SERVER``` and ```SERVER_PATH``` yourself. The other
+variables all have sensible defaults set.
 
 ## Troubleshooting
 
@@ -120,6 +123,20 @@ your SD-card ```NeoGeo``` and ```NEOGEO``` are the same thing, while they're qui
 
 Ensure that you test your update scripts etc. carefully before moving your stuff over to an NFS-based
 network share.
+
+### Mounting NFS may take a while
+
+The ```SERVER_TIMEOUT``` value is used in two places, accumulating to a total timeout value of twice the number
+of seconds you define for it. By default this means it can take up to two minutes for your MiSTer to have NFS
+mounted and ready to go. These timeouts are *not blocking* to the rest of the system's startup process, so you
+may get some glitchy behavior there if you have overlapping directories with differing contents. The contents
+of the ```/media/fat``` hierarchy may suddenly appear different from how it after NFS gets mounted.
+
+The mount should take hardly any time at all if your NFS-server is already up before you start your MiSTer,
+but you could be in for a surprise if you're using the ```WOL``` flag for instance and your NFS-server needs
+to boot up while your MiSTer proceeds to load from its SD-card. This is an advanced use case, so don't try
+this if you're not comfortable with it.. or open a thread on the MiSTerFPGA.org forum and aks for guidance.
+
 
 ### Can't write to my network share
 
