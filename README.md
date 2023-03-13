@@ -159,6 +159,24 @@ permissions set on them.
 You're dealing with the dark underbelly of the 1970's world of UNIX here. Learn it, it's fun! Or use
 something like a USB-drive or a bigger SD-card instead.
 
+## Combinations with USB and CIFS storage
+
+MiSTer provides alternative options for storage next to NFS. At the time of this writing, these options
+have not been unified into any kind of Grand Unifying Storage Architecture for the MiSTer so this is
+the observed behavior from initial testing.
+
+USB trumps everything. When you attach USB-storage, its contents get overlaid onto everything else
+including CIFS and NFS storage options.
+
+CIFS and NFS do coexist fairly peacefully since they both have different mechanics of exposing their
+contents to the user. The NFS-script overlays the NFS mounts onto the existing structures on the SD-card,
+while CIFS exposes its own ```cifs``` directory which the cores prefer when they detect it, giving you
+the option of navigating to the SD-card directory structures that sit alongside it.
+
+At this point in time, these items are simply facts of life. If/when NFS sees any significat uptake it'd
+probably be a good idea to unify alternative storage options into a predictable mechanism. For now the
+user should note that these differences exist.
+
 ## General wonkiness after turning my MiSTer off
 
 As mentioned before, NFS comes from datacenters where one does not simply power off a machine. NFS
