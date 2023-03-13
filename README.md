@@ -44,8 +44,6 @@ You can use this to keep a small-ish ```/media/fat/games``` directory on your SD
 while having the entire history of retrogaming and a plethora of Windows 95 installations on your NAS at home
 by overlaying ```/media/fat/games``` via NFS.
 
-I told you there'd be dragons..
-
 ## Configuration
 
 The preferred method for configuring the script is through an INI file that sits in the same
@@ -107,6 +105,16 @@ By virtue of being an old UNIX file-sharing protocol, you're exposing your MiSTe
 began with teletypes and punch cards. You'll need to be more careful with it than you'd be when using just
 the plain local SD card or you'll run into issues that may seem hard to debug at first. Here's a few
 pointers.
+
+### Case sensitivity
+
+MiSTer runs Linux, which is generally case-sensitive but not in the MiSTer's default case using just
+the SD-card for storage. The SD-card is formatted using exFAT, which is case-insensitive. NFS, on the
+other hand, generally has a Linux/UNIX backing store which *does* care about case. This means that on
+your SD-card ```NeoGeo``` and ```NEOGEO``` are the same thing, while they're quite distinct via NFS.
+
+Ensure that you test your update scripts etc. carefully before moving your stuff over to an NFS-based
+network share.
 
 ### Can't write to my network share
 
