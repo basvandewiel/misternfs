@@ -75,6 +75,11 @@ mount the directory as read-only (see below).
 You can also modify the script itself, but that'll get clobbered when you update the script.
 Using an INI file keeps the script and its configuration separate, which is good practice.
 
+## Troubleshooting
+
+This script is entirely silent on the MiSTer's console. For troubleshooting, have a look at the syslog file in
+```/var/log/messages```. The script logs status messages there.
+
 ## Concerning NFS: more dragons
 
 The NFS protocol is ancient and it was conceived in the days of big-iron UNIX machines in
